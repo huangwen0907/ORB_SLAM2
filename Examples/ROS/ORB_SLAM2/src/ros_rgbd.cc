@@ -157,7 +157,7 @@ void ImageGrabber::GrabRGBD(const sensor_msgs::ImageConstPtr& msgRGB,const senso
     static tf::TransformBroadcaster br;
 
     tf::Matrix3x3 globalRotation = cameraRotation_rh * rotation270degXZ;
-    tf::Vector3 globalTranlation = cameraTranlation_rh * rotation270degXZ;
+    tf::Vector3 globalTranlation = 5 * cameraTranlation_rh * rotation270degXZ;
     tf::Transform transform = tf::Transform(globalRotation,globalTranlation);
     br.sendTransform(tf::StampedTransform(transform,ros::Time::now(),"camera_link", "camera_pose"));
 
