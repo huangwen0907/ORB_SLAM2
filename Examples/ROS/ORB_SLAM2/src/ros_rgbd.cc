@@ -34,6 +34,8 @@
 
 #include"../../../include/System.h"
 
+#include "geometry_msgs/PoseStamped.h"
+
 using namespace std;
 
 class ImageGrabber
@@ -70,6 +72,7 @@ int main(int argc, char **argv)
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> sync_pol;
     message_filters::Synchronizer<sync_pol> sync(sync_pol(10), rgb_sub,depth_sub);
     sync.registerCallback(boost::bind(&ImageGrabber::GrabRGBD,&igb,_1,_2));
+    ros::Publisher posePub = nh.advertise<geometry_msgs::PoseStamped>("camera_pos",10);
 
     ros::spin();
 
@@ -109,7 +112,36 @@ void ImageGrabber::GrabRGBD(const sensor_msgs::ImageConstPtr& msgRGB,const senso
         return;
     }
 
-    mpSLAM->TrackRGBD(cv_ptrRGB->image,cv_ptrD->image,cv_ptrRGB->header.stamp.toSec());
+    // get the camera pose
+    cv::Mat pose = mpSLAM->TrackRGBD(cv_ptrRGB->image,cv_ptrD->image,cv_ptrRGB->header.stamp.toSec());
+
+    if (pose.empty()) {
+        return;
+    }
+
+    geometry_msgs::PoseStamped pose;
+    pose.header.stamp = ros::Time::now();
+    pose.header.frame_id ="map";
+
+    /*
+    *                      SE(3) = | sR   t |
+    *                              | 0    1 |
+    */
+
+    cv::Mat Rwc = pose.rowRange(0,3).colRange(0,3).t(); //Rotation information
+    cv::Mat twc = - Rwc * pose.rowRange(0,3).col(3); // Transform information
+
+    vector<float> q = ORB_SLAM2::Converter::toQuaternion(Rwc);
+
+    // set the rotation and tranlation
+    tf::Quaternion quaternion(q[0],q[1],q[2],q[3]);
+    tf::Transform translation;
+    translation.setOrigin(tf::Vector(twc.at<float>(0,0),twc.at<float>(0,1),twc.at<float>(0,2)));
+    translation.setRotation(quaternion);
+
+    tf::poseTFToMsg(translation, pose.pose);
+
+    posePub.publish(pose);
 }
 
 
